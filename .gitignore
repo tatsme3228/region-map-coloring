@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+.regionmap-cache/
+out/
+bin/
+*.raster.png

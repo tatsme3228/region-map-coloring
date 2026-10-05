@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 768">
+  <rect x="0" y="0" width="512" height="768" fill="#ffffff"/>
+  <g fill="none" stroke="#000000" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- balloon 1 (left) -->
+    <ellipse cx="140" cy="220" rx="70" ry="88"/>
+    <polygon points="126,312 154,312 140,344"/>
+    <path d="M140 344 C 132 420, 150 470, 140 540"/>
+    <!-- balloon 2 (center, tall) -->
+    <ellipse cx="268" cy="140" rx="64" ry="80"/>
+    <polygon points="254,224 282,224 268,256"/>
+    <path d="M268 256 C 278 340, 258 400, 268 500"/>
+    <!-- balloon 3 (right) -->
+    <ellipse cx="388" cy="250" rx="58" ry="74"/>
+    <polygon points="374,328 402,328 388,358"/>
+    <path d="M388 358 C 380 430, 396 480, 388 552"/>
+    <!-- confetti -->
+    <circle cx="70" cy="430" r="16"/>
+    <circle cx="208" cy="392" r="14"/>
+    <circle cx="330" cy="420" r="15"/>
+    <circle cx="452" cy="400" r="14"/>
+    <circle cx="96" cy="540" r="15"/>
+    <!-- ground strip -->
+    <rect x="0" y="640" width="512" height="100"/>
+  </g>
+</svg>
