@@ -13,10 +13,10 @@ single source of truth. For each page stem this tool:
   4. upserts the ContentManifest.json entry (regionMap + regionCount),
   5. prints QA stats; exits 1 when the region count is out of band 6-64.
 
-Fallback: if WebKit rasterization fails and --fallback-dir is given with a
-<stem>.png present, it is used instead (logged). On hosts without swiftc
-the WebKit step is skipped entirely — supply rasters via --fallback-dir
-(any faithful rasterizer works) or pre-place <stem>-raster.png in the cache.
+Fallback: if WebKit rasterization is unavailable (no swiftc, build failure,
+or runtime error), the tool auto-detects an installed SVG rasterizer
+(resvg, rsvg-convert, inkscape) and rasterizes with it; --fallback-dir
+remains the manual seam (pre-place <stem>-raster.png in the cache also works).
 
 Usage:
   python3 onboard_page.py <stem> --title "Display Title" \
@@ -27,6 +27,7 @@ Usage:
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,8 @@ SRC = os.path.join(SCRIPT_DIR, "rasterize_svg.swift")
 
 BAND = (6, 64)
 INK_THRESHOLD = 128
+
+EXTERNAL_RASTERIZERS = ("resvg", "rsvg-convert", "inkscape")
 
 VALUE_OPTS = {"--title", "--svg-dir", "--pages-dir", "--manifest",
               "--category", "--cache-dir", "--fallback-dir"}
@@ -75,12 +78,60 @@ def ensure_rasterizer(cache_dir):
     if os.path.exists(bin_path) and os.path.getmtime(bin_path) >= os.path.getmtime(SRC):
         return bin_path
     if shutil.which("swiftc") is None:
-        print("note: no swiftc on PATH — using cached or fallback rasters only")
+        print("note: no swiftc on PATH — using installed rasterizer or fallback rasters")
         return None
     os.makedirs(os.path.dirname(bin_path), exist_ok=True)
     print("building rasterizer...")
-    subprocess.run(["swiftc", "-O", SRC, "-o", bin_path], check=True)
+    try:
+        subprocess.run(["swiftc", "-O", SRC, "-o", bin_path], check=True,
+                       capture_output=True, text=True)
+    except subprocess.CalledProcessError as err:
+        print("note: swiftc present but build failed (%s) — using installed\n"
+              "      rasterizer or fallback rasters instead"
+              % (err.stderr.strip().splitlines()[-1] if err.stderr.strip() else "unknown error"))
+        return None
     return bin_path
+
+
+def viewBox_size(svg_path):
+    """Parses viewBox="minx miny w h" from the root element; None if absent."""
+    try:
+        with open(svg_path, encoding="utf-8", errors="ignore") as f:
+            head = f.read(16384)
+    except OSError:
+        return None
+    m = re.search(r'viewBox\s*=\s*"([^"]+)"', head)
+    if not m:
+        return None
+    nums = [float(x) for x in m.group(1).replace(",", " ").split()]
+    if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
+        return int(round(nums[2])), int(round(nums[3]))
+    return None
+
+
+def external_raster(svg, out):
+    """Rasterize with an installed third-party CLI (same priority as docs).
+
+    Returns True on success. Output is sized 1:1 with the viewBox when the
+    viewBox is present, matching what the WebKit rasterizer produces.
+    """
+    size = viewBox_size(svg)
+    for name in EXTERNAL_RASTERIZERS:
+        exe = shutil.which(name)
+        if not exe:
+            continue
+        if name == "resvg":
+            args = [exe] + (["-w", str(size[0]), "-h", str(size[1])] if size else []) + [svg, out]
+        elif name == "rsvg-convert":
+            args = [exe] + (["-w", str(size[0]), "-h", str(size[1])] if size else []) + ["-o", out, svg]
+        else:  # inkscape >= 1.0 export syntax
+            args = [exe, svg, "--export-type=png"] + (["--export-width=%d" % size[0], "--export-height=%d" % size[1]] if size else []) + ["--export-filename=" + out]
+        proc = subprocess.run(args, capture_output=True, text=True)
+        if proc.returncode == 0 and os.path.exists(out):
+            print("note: rasterized with %s" % name)
+            return True
+        sys.stderr.write("%s failed: %s\n" % (name, proc.stderr.strip()))
+    return False
 
 
 def raster_path(stem, opts, bin_path):
@@ -96,6 +147,10 @@ def raster_path(stem, opts, bin_path):
         if proc.returncode == 0 and os.path.exists(out):
             return out
         sys.stderr.write(proc.stderr)
+    else:
+        os.makedirs(cache, exist_ok=True)
+        if external_raster(svg, out):
+            return out
     if opts.get("fallback-dir"):
         fallback = os.path.join(opts["fallback-dir"], stem + ".png")
         if os.path.exists(fallback):

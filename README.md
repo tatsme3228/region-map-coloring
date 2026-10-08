@@ -47,8 +47,10 @@ demand with `swiftc`) rasterizes via WebKit because it mirrors the reference
 renderer the fidelity gate was validated against. It is a proven choice, not
 a dependency.
 
-On other platforms, rasterize with your own tool into a folder as
-`<stem>.png` (keep the size equal to the viewBox) and pass
+On other platforms the tool auto-detects an installed SVG rasterizer
+(`resvg`, `rsvg-convert`, or `inkscape`, in that order) and rasterizes with
+it at 1:1 viewBox size — the quickstart below works unchanged. Prefer
+another tool? Rasterize into a folder as `<stem>.png` and pass
 `--fallback-dir`. Examples:
 
 ```bash
@@ -75,10 +77,11 @@ region count, and prints QA stats. Exit code is non-zero if the page's
 region count is out of the design band (6-64) — bad pages fail loudly
 instead of silently shipping uncolorable art.
 
-No `swiftc` on your machine? Same command plus `--fallback-dir
-my-rasters` (see Requirements): the tool skips the WebKit step with a
-one-line note and uses your raster — or tells you plainly, with no stack
-trace, when no raster is available.
+No (or broken) `swiftc` on your machine? The same command still works:
+WebKit is skipped with a one-line note and an installed `resvg` /
+`rsvg-convert` / `inkscape` rasterizes instead — or, with none of those
+present, the tool uses `--fallback-dir` rasters, or tells you plainly
+(no stack trace) when no raster is available.
 
 Open the region-map PNG in any viewer and you'll see the trick: every
 fillable area is a unique flat color, because the RGB channels *are* the
