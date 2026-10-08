@@ -23,7 +23,9 @@ description: Implements the region-map coloring engine for children's coloring a
 - Raster source for the map: derived FROM the SVG via WebKit rasterization
   (scripts/rasterize_svg.swift — same engine as the fidelity gate reference),
   so geometry aligns pixel-for-pixel with the line art. The SVG folder is the
-  single source of truth.
+  single source of truth. Any faithful rasterizer works as the input (the map
+  only needs a 1:1 viewBox black/white raster); WebKit is the bundled default
+  because it matched the fidelity reference.
 
 ## Why this wins (measured on the reference app)
 

@@ -6,16 +6,24 @@ with one exact integer lookup, with no flood fill at runtime, ever.
 
 The core idea: keep the **original SVG as the immutable visual authority**
 (displayed, never converted), and derive from it a **lossless region-ID
-raster** at build time (`id = R*65536 + G*256 + B` in an RGB PNG). At runtime
-you decode that PNG once, and every tap resolves in O(1) by reading one
-pixel. Region labeling uses a **run-length two-pass union-find** instead of
-per-pixel BFS — it labels a 1024x1536 page in ~0.1-0.2 s (roughly 100x
-faster on the machine this was developed on; timings are indicative, not
+raster** at build time. Every fillable area in that raster is painted with a
+color that silently *is* its integer ID — the PNG is a lookup table, not a
+picture:
+
+```
+region_id = (R << 16) | (G << 8) | B
+```
+
+At runtime you decode that PNG once, and every tap resolves in O(1) by
+reading one pixel. Region labeling uses a **run-length two-pass union-find**
+instead of per-pixel BFS — it labels a 1024x1536 page in ~0.1-0.2 s (roughly
+100x faster on the machine this was developed on; timings are indicative, not
 benchmarks).
 
-Everything is local: Python 3 + Pillow, and one Swift file that uses macOS
-WebKit to rasterize the SVG pixel-faithfully. No API keys, no network, no
-paid services.
+Everything is local and offline. The region-mapping core is pure Python 3 +
+Pillow and runs anywhere; the bundled SVG rasterizer is one Swift file using
+macOS WebKit — a faithful default, not a requirement (see Requirements).
+No API keys, no network, no paid services.
 
 ## What's in the box
 
@@ -30,8 +38,25 @@ paid services.
 
 ## Requirements
 
-- macOS (the rasterizer shells out to WebKit/AppKit via `swiftc`)
-- Python 3 with Pillow (`pip3 install pillow`) — nothing else
+**Portable core (any OS):** Python 3 with Pillow (`pip3 install pillow`).
+`make_region_map.py` consumes a black/white raster of the SVG at 1:1 with its
+viewBox — any faithful rasterizer can produce that.
+
+**macOS default rasterizer:** `scripts/rasterize_svg.swift` (compiled on
+demand with `swiftc`) rasterizes via WebKit because it mirrors the reference
+renderer the fidelity gate was validated against. It is a proven choice, not
+a dependency.
+
+On other platforms, rasterize with your own tool into a folder as
+`<stem>.png` (keep the size equal to the viewBox) and pass
+`--fallback-dir`. Examples:
+
+```bash
+resvg -w 512 -h 768 sample/balloon-lineart.svg my-rasters/balloon-lineart.png
+# or rsvg-convert -w 512 -h 768 ... -o my-rasters/balloon-lineart.png
+# or inkscape --export-type=png --export-width=512 --export-height=768 ...
+# or a headless-browser screenshot at the exact viewBox size
+```
 
 ## Quickstart
 
@@ -49,6 +74,11 @@ The onboarding tool compiles the rasterizer on first use (into a local
 region count, and prints QA stats. Exit code is non-zero if the page's
 region count is out of the design band (6-64) — bad pages fail loudly
 instead of silently shipping uncolorable art.
+
+No `swiftc` on your machine? Same command plus `--fallback-dir
+my-rasters` (see Requirements): the tool skips the WebKit step with a
+one-line note and uses your raster — or tells you plainly, with no stack
+trace, when no raster is available.
 
 Open the region-map PNG in any viewer and you'll see the trick: every
 fillable area is a unique flat color, because the RGB channels *are* the

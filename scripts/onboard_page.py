@@ -14,7 +14,9 @@ single source of truth. For each page stem this tool:
   5. prints QA stats; exits 1 when the region count is out of band 6-64.
 
 Fallback: if WebKit rasterization fails and --fallback-dir is given with a
-<stem>.png present, it is used instead (logged).
+<stem>.png present, it is used instead (logged). On hosts without swiftc
+the WebKit step is skipped entirely — supply rasters via --fallback-dir
+(any faithful rasterizer works) or pre-place <stem>-raster.png in the cache.
 
 Usage:
   python3 onboard_page.py <stem> --title "Display Title" \
@@ -72,6 +74,9 @@ def ensure_rasterizer(cache_dir):
     bin_path = os.path.join(cache_dir, "bin", "rasterize_svg")
     if os.path.exists(bin_path) and os.path.getmtime(bin_path) >= os.path.getmtime(SRC):
         return bin_path
+    if shutil.which("swiftc") is None:
+        print("note: no swiftc on PATH — using cached or fallback rasters only")
+        return None
     os.makedirs(os.path.dirname(bin_path), exist_ok=True)
     print("building rasterizer...")
     subprocess.run(["swiftc", "-O", SRC, "-o", bin_path], check=True)
@@ -84,17 +89,21 @@ def raster_path(stem, opts, bin_path):
     out = os.path.join(cache, stem + "-raster.png")
     if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(svg):
         return out
-    os.makedirs(cache, exist_ok=True)
-    proc = subprocess.run([bin_path, opts["svg-dir"], cache, stem],
-                          capture_output=True, text=True)
-    if proc.returncode == 0 and os.path.exists(out):
-        return out
-    sys.stderr.write(proc.stderr)
+    if bin_path is not None:
+        os.makedirs(cache, exist_ok=True)
+        proc = subprocess.run([bin_path, opts["svg-dir"], cache, stem],
+                              capture_output=True, text=True)
+        if proc.returncode == 0 and os.path.exists(out):
+            return out
+        sys.stderr.write(proc.stderr)
     if opts.get("fallback-dir"):
         fallback = os.path.join(opts["fallback-dir"], stem + ".png")
         if os.path.exists(fallback):
-            print("warning: WebKit raster failed for %s; using fallback raster" % stem)
+            print("warning: WebKit raster unavailable for %s; using fallback raster" % stem)
             return fallback
+    print("error: no raster for %s — pre-place %s with any rasterizer, "
+          "or pass --fallback-dir <dir> containing %s.png"
+          % (stem, out, stem))
     return None
 
 
